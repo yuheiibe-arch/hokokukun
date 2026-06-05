@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; background-color: #f8fafc; color: #334155; padding: 20px; margin: 0; }
+    h2 { color: #1e293b; font-size: 18px; margin-top: 0; border-bottom: 2px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px; }
+    .container { background: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
+    .btn-quick { flex: 1; background-color: #e2e8f0; color: #475569; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .btn-quick:hover { background-color: #cbd5e1; }
+    .btn-quick.active { background-color: #3b82f6; color: #ffffff; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.4); }
+    .date-inputs { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; background: #f1f5f9; padding: 15px; border-radius: 6px; }
+    .date-field { display: flex; flex-direction: column; width: 45%; }
+    label { font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #64748b; }
+    input[type="date"] { padding: 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 14px; outline: none; }
+    input[type="date"]:focus { border-color: #3b82f6; }
+    .btn-submit { width: 100%; background-color: #10b981; color: white; border: none; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+    .btn-submit:hover { background-color: #059669; }
+    .btn-submit:disabled { background-color: #94a3b8; cursor: not-allowed; }
+    #message { margin-top: 15px; font-size: 13px; color: #ef4444; text-align: center; font-weight: bold; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>📅 集計期間の選択</h2>
+    
+    <div class="btn-group">
+      <button type="button" class="btn-quick active" id="btnLastMonth" onclick="setDates('last')">先月分 (1ヶ月間)</button>
+      <button type="button" class="btn-quick" id="btnThisMonth" onclick="setDates('this')">当月分 (昨日まで)</button>
+    </div>
+
+    <div class="date-inputs">
+      <div class="date-field">
+        <label>開始日</label>
+        <input type="date" id="startDate" required>
+      </div>
+      <span style="color: #94a3b8; font-weight: bold;">〜</span>
+      <div class="date-field">
+        <label>終了日</label>
+        <input type="date" id="endDate" required>
+      </div>
+    </div>
+
+    <button type="button" class="btn-submit" id="submitBtn" onclick="submitForm()">🚀 この期間で集計を開始</button>
+    <div id="message"></div>
+  </div>
+
+  <script>
+    const today = new Date();
+    
+    function formatDate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function setDates(mode) {
+      const startInput = document.getElementById('startDate');
+      const endInput = document.getElementById('endDate');
+      const btnLast = document.getElementById('btnLastMonth');
+      const btnThis = document.getElementById('btnThisMonth');
+
+      let start, end;
+
+      if (mode === 'last') {
+        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        end = new Date(today.getFullYear(), today.getMonth(), 0);
+        btnLast.classList.add('active');
+        btnThis.classList.remove('active');
+      } else if (mode === 'this') {
+        start = new Date(today.getFullYear(), today.getMonth(), 1);
+        end = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        if (today.getDate() === 1) {
+           start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+           end = new Date(today.getFullYear(), today.getMonth(), 0);
+        }
+        btnThis.classList.add('active');
+        btnLast.classList.remove('active');
+      }
+
+      startInput.value = formatDate(start);
+      endInput.value = formatDate(end);
+    }
+
+    window.onload = () => setDates('last');
+
+    function submitForm() {
+      const start = document.getElementById('startDate').value;
+      const end = document.getElementById('endDate').value;
+      const msg = document.getElementById('message');
+      const btn = document.getElementById('submitBtn');
+
+      if (!start || !end) {
+        msg.textContent = '開始日と終了日を指定してください。';
+        return;
+      }
+      if (new Date(start) > new Date(end)) {
+        msg.textContent = '終了日は開始日以降の日付にしてください。';
+        return;
+      }
+
+      msg.style.color = '#3b82f6';
+      msg.textContent = '集計を実行中です。この画面は自動で閉じます...';
+      btn.disabled = true;
+      btn.textContent = '⏳ 処理中...';
+
+      google.script.run
+        .withSuccessHandler(() => google.script.host.close())
+        .withFailureHandler((error) => {
+           msg.style.color = '#ef4444';
+           msg.textContent = 'エラーが発生しました: ' + error.message;
+           btn.disabled = false;
+           btn.textContent = '🚀 この期間で集計を開始';
+        })
+        .processAggregationFromDialog(start, end);
+    }
+  </script>
+</body>
+</html>

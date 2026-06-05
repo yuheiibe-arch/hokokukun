@@ -1,0 +1,37 @@
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🌟 月次報告システム')
+    .addItem('⚡ 先月分をワンクリック集計', 'runLastMonthQuick')
+    .addSeparator()
+    .addItem('📅 期間を指定して集計 (詳細モード)', 'showAggregationDialog')
+    .addToUi();
+}
+
+function showAggregationDialog() {
+  const html = HtmlService.createHtmlOutputFromFile('Dialog')
+      .setWidth(500)
+      .setHeight(450)
+      .setTitle('集計設定パネル');
+  SpreadsheetApp.getUi().showModalDialog(html, ' ');
+}
+
+function runLastMonthQuick() {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const end = new Date(today.getFullYear(), today.getMonth(), 0);
+  
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert('確認', 
+    `【先月分】の集計を開始します。\n期間: ${Utilities.formatDate(start, "GMT+9", "yyyy/MM/dd")} 〜 ${Utilities.formatDate(end, "GMT+9", "yyyy/MM/dd")}\n\nよろしいですか？`, 
+    ui.ButtonSet.YES_NO);
+    
+  if (response === ui.Button.YES) {
+    processAggregationCore(start); // 月次処理なので開始日を基準とする
+  }
+}
+
+function processAggregationFromDialog(startStr, endStr) {
+  const start = new Date(startStr);
+  start.setHours(0,0,0,0);
+  processAggregationCore(start);
+}
