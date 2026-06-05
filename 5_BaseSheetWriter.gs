@@ -183,30 +183,88 @@ function writeToBaseSheet(ss, allData) {
     sheet.getRange(58, col).setValue(formatRaw(l.enrolled.partTime, 'people'));
   });
 }
-
 // ===============================================
-// ★ 裏側（バックアップ用）への保存機能（復活）
+// ★ バックシート（月次アーカイブ）への保存機能
 // ===============================================
-function saveToBackSheet(ss, allData) {
-  // 裏側シートの取得（存在しなければ「裏側データ」という名前で自動作成）
-  let backSheet = ss.getSheetByName('裏側データ');
-  
-  if (!backSheet) {
-    backSheet = ss.insertSheet('裏側データ');
-    backSheet.appendRow(['実行日時', '対象月', '保存データ(JSON)']);
-    backSheet.getRange(1, 1, 1, 3).setBackground('#f3f3f3').setFontWeight('bold');
-    backSheet.setColumnWidth(3, 800); 
+function saveToBackSheet(ss, allDataOrCurrent, monthStrOptional) {
+  // 呼び出し元の引数の違いを吸収する処理
+  let currentData, targetMonthStr;
+  if (monthStrOptional) {
+    currentData = allDataOrCurrent;
+    targetMonthStr = monthStrOptional;
+  } else {
+    currentData = allDataOrCurrent.current;
+    targetMonthStr = allDataOrCurrent.monthStrs.current;
   }
 
+  if (!currentData || !targetMonthStr || targetMonthStr === "-") return;
+
+  // シートの取得（存在しなければ「月次アーカイブ」という名前で自動作成）
+  let backSheet = ss.getSheetByName('月次アーカイブ');
+  const headers = [
+    '実行日時', '対象月', 'エリア', 
+    '平均時給(円)', '依頼手当(円)', 
+    '新規採用_直接(人)', '新規採用_紹介(人)', 
+    '在籍数_常勤(人)', '在籍数_定期(人)',
+    '稼働UU_総数(人)', '稼働UU_常勤(人)', '稼働UU_定期(人)', '稼働UU_直接(人)', '稼働UU_紹介(人)', '稼働UU_休出(人)', 
+    '不在時間(分)', '残業時間(分)', '2診時間(h)', 
+    '稼働拠点数', '来院数実績', '売上実績'
+  ];
+
+  if (!backSheet) {
+    backSheet = ss.insertSheet('月次アーカイブ');
+    backSheet.appendRow(headers);
+    backSheet.getRange(1, 1, 1, headers.length).setBackground('#e3f2fd').setFontWeight('bold');
+    backSheet.setFrozenRows(1);
+  }
+
+  // ★重複防止：すでに同じ対象月のデータがあれば行を削除（最新データで上書きするため）
+  const data = backSheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][1] === targetMonthStr) {
+      backSheet.deleteRow(i + 1);
+    }
+  }
+
+  // 書き込むデータをエリアごとに配列として作成
   const timestamp = Utilities.formatDate(new Date(), "GMT+9", "yyyy/MM/dd HH:mm:ss");
-  // allData から対象月文字列を取得（なければ "-"）
-  const targetMonthStr = (allData && allData.monthStrs) ? allData.monthStrs.current : "-";
+  const targetAreas = ['関東', '関西', '関東第一', '関東第二', '埼玉', '神奈川', '千葉', '茨城', '大阪', 'グループ全体'];
+  const rowsToAppend = [];
 
-  // 最新の集計結果を文字列（JSON）として丸ごとバックアップ保存
-  const jsonData = JSON.stringify(allData);
+  targetAreas.forEach(area => {
+    const d = currentData[area];
+    if (!d) return;
 
-  // 最終行に追記
-  backSheet.appendRow([timestamp, targetMonthStr, jsonData]);
+    const row = [
+      timestamp,                    // 実行日時
+      targetMonthStr,               // 対象月
+      area,                         // エリア
+      d.wage.areaAvg || 0,          // 平均時給
+      d.wage.requestAllowance || 0, // 依頼手当
+      d.hires.direct || 0,          // 新規採用(直接)
+      d.hires.agency || 0,          // 新規採用(紹介)
+      d.enrolled.regular || 0,      // 在籍数(常勤)
+      d.enrolled.partTime || 0,     // 在籍数(定期)
+      d.uu.total || 0,              // 稼働UU(総数)
+      d.uu.reg || 0,                // 稼働UU(常勤)
+      d.uu.part || 0,               // 稼働UU(定期)
+      d.uu.dir || 0,                // 稼働UU(直接)
+      d.uu.agc || 0,                // 稼働UU(紹介)
+      d.uu.hol || 0,                // 稼働UU(休出)
+      d.shiftDiff.absenceMins || 0, // 不在時間
+      d.shiftDiff.overtimeMins || 0,// 残業時間
+      d.twoDoc.hours || 0,          // 2診時間
+      d.baseCount.total || 0,       // 稼働拠点数
+      d.sales.visitAct || 0,        // 来院数実績
+      d.sales.salesAct || 0         // 売上実績
+    ];
+    rowsToAppend.push(row);
+  });
 
-  console.log(`✅ 裏側シートに ${targetMonthStr} のデータをバックアップ保存しました。`);
+  // 一括でシートへ追記
+  if (rowsToAppend.length > 0) {
+    backSheet.getRange(backSheet.getLastRow() + 1, 1, rowsToAppend.length, headers.length).setValues(rowsToAppend);
+  }
+
+  console.log(`✅ 月次アーカイブシートに ${targetMonthStr} のデータを表形式で保存しました。`);
 }
