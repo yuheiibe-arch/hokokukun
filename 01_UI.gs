@@ -9,11 +9,14 @@ function onOpen() {
     .addToUi();
 }
 
-function showAggregationDialog() {
-  const html = HtmlService.createHtmlOutputFromFile('Dialog')
-      .setWidth(500)
-      .setHeight(450)
-      .setTitle('集計設定パネル');
+// ==========================================
+// ★ 月次報告用のUIを立ち上げる関数（新規追加）
+// ==========================================
+function showReportDialog() {
+  const html = HtmlService.createHtmlOutputFromFile('ReportUI')
+      .setTitle('月次報告・AIレビュージェネレーター')
+      .setWidth(850)    // ★横幅を広げる
+      .setHeight(900);  // ★縦幅を広げる（これ以上大きくすると見切れるPCがあります）
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
 
@@ -45,6 +48,6 @@ function showReportDialog() {
   const html = HtmlService.createHtmlOutputFromFile('ReportUI')
       .setTitle('月次報告・AIレビュージェネレーター')
       .setWidth(750)
-      .setHeight(850);
+      .setHeight(1000); // ★修正: 見切れないように縦幅を広げました
   SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
