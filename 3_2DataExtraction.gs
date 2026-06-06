@@ -11,7 +11,8 @@ function extractForMonth(ctx, period) {
       ratioTime: { total: 0, reg: 0, hol: 0, part: 0, agc: 0, dir: 0 }, 
       wage: { areaAvg: 0, sum: 0, workMins: 0, requestAllowance: 0 },
       shiftDiff: { absenceMins: 0, overtimeMins: 0 },
-      twoDoc: { hours: 0 },
+      twoDoc: { hours: 0, baseCount: 0 },
+      _twoDocDaysMap: {}, // ★2診発生日数のカウント用辞書に変更
       baseCount: { total: 0 },
       enrolled: { regular: 0, partTime: 0 }, enrolledRegSet: new Set(), enrolledPartSet: new Set(),
       dailyShifts: {}
@@ -86,7 +87,6 @@ function processHiringData(ctx, period, res) {
       let rawClinic = colClinic !== -1 ? String(ctx.chkData[r][colClinic]).trim() : '';
       const firstClinicVal = colFirstClinic !== -1 ? String(ctx.chkData[r][colFirstClinic]).trim() : '';
 
-      // 優先順位: 1. 通常拠点 -> 2. 初回拠点列 -> 3. シフト裏引き
       if (!rawClinic && firstClinicVal) rawClinic = firstClinicVal;
       if (!rawClinic) {
         const shiftInfo = ctx.firstShiftMap[id] || ctx.firstShiftMap[name];
@@ -195,7 +195,14 @@ function processShiftData(ctx, period, res) {
     const officialClinic = ctx.clinicDict[rawClinic];
     if (!officialClinic) continue; 
     
-    if (colDepart !== -1 && String(sData[i][colDepart]).trim() !== '小児科') continue;
+    // 亀有・北葛西は小児科限定
+    if (colDepart !== -1) {
+      const depart = String(sData[i][colDepart]).trim();
+      if (officialClinic.includes('亀有') || officialClinic.includes('北葛西')) {
+        if (depart !== '小児科') continue;
+      }
+    }
+
     const dateObj = ctx.parseDateSafe(sData[i][colDate]);
     if (!dateObj || Utilities.formatDate(dateObj, "GMT+9", "yyyy/MM") !== period.str) continue;
     
@@ -352,6 +359,11 @@ function processShiftData(ctx, period, res) {
       d.shiftDiff.overtimeMins += dailyOvertimeMins;
       d.twoDoc.hours += (twoDoctorMins / 60); 
       d.shiftDiff.absenceMins += absenceMins;
+
+      // ★ 修正：1日の重複時間（2診時間）が180分以上の場合、その拠点の発生日数を+1する
+      if (twoDoctorMins >= 180) {
+        d._twoDocDaysMap[info.clinic] = (d._twoDocDaysMap[info.clinic] || 0) + 1;
+      }
     }
   });
 }
@@ -368,70 +380,15 @@ function finalizePeriodData(res, targetAreas) {
     d.enrolled.regular = d.enrolledRegSet.size;
     d.enrolled.partTime = d.enrolledPartSet.size;
     
+    // ★ 修正：月に4日以上（週1回ペース）発生している拠点のみをカウント
+    d.twoDoc.baseCount = Object.values(d._twoDocDaysMap).filter(days => days >= 4).length;
+    
     delete d.enrolledRegSet; 
     delete d.enrolledPartSet;
+    delete d._twoDocDaysMap; // ★使い終わった辞書を削除
     delete d.uuDict; 
     delete d.dailyShifts; 
     delete d.wage.sum; 
     delete d.wage.workMins;
   });
-}
-
-// =========================================================
-// 6. 月次アーカイブへの保存（ダッシュボード連携用）
-// =========================================================
-function saveToBackSheet(ss, currentData, targetMonthStr) {
-  if (!currentData || !targetMonthStr || targetMonthStr === "-") return;
-
-  let backSheet = ss.getSheetByName('月次アーカイブ');
-  const headers = [
-    '実行日時', '対象月', 'エリア', 
-    '平均時給(円)', '依頼手当(円)', 
-    '新規採用_直接(人)', '新規採用_紹介(人)', 
-    '在籍数_常勤(人)', '在籍数_定期(人)',
-    '稼働UU_総数(人)', '稼働UU_常勤(人)', '稼働UU_定期(人)', '稼働UU_直接(人)', '稼働UU_紹介(人)', '稼働UU_休出(人)', 
-    '不在時間(時間)', '残業時間(時間)', '2診時間(時間)', 
-    '稼働拠点数', '来院数実績', '売上実績'
-  ];
-
-  if (!backSheet) {
-    backSheet = ss.insertSheet('月次アーカイブ');
-    backSheet.appendRow(headers);
-    backSheet.getRange(1, 1, 1, headers.length).setBackground('#e3f2fd').setFontWeight('bold');
-    backSheet.setFrozenRows(1);
-  }
-
-  // 重複防止：すでに同じ対象月のデータがあれば削除して上書き
-  const data = backSheet.getDataRange().getValues();
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][1] === targetMonthStr) {
-      backSheet.deleteRow(i + 1);
-    }
-  }
-
-  const timestamp = Utilities.formatDate(new Date(), "GMT+9", "yyyy/MM/dd HH:mm:ss");
-  const targetAreas = ['関東', '関西', '関東第一', '関東第二', '埼玉', '神奈川', '千葉', '茨城', '大阪', 'グループ全体'];
-  const rowsToAppend = [];
-
-  targetAreas.forEach(area => {
-    const d = currentData[area];
-    if (!d) return;
-
-    rowsToAppend.push([
-      timestamp, targetMonthStr, area, 
-      d.wage.areaAvg || 0, d.wage.requestAllowance || 0, 
-      d.hires.direct || 0, d.hires.agency || 0, 
-      d.enrolled.regular || 0, d.enrolled.partTime || 0, 
-      d.uu.total || 0, d.uu.reg || 0, d.uu.part || 0, d.uu.dir || 0, d.uu.agc || 0, d.uu.hol || 0, 
-      (d.shiftDiff.absenceMins || 0) / 60, 
-      (d.shiftDiff.overtimeMins || 0) / 60, 
-      d.twoDoc.hours || 0, 
-      d.baseCount.total || 0, 
-      d.sales.visitAct || 0, d.sales.salesAct || 0
-    ]);
-  });
-
-  if (rowsToAppend.length > 0) {
-    backSheet.getRange(backSheet.getLastRow() + 1, 1, rowsToAppend.length, headers.length).setValues(rowsToAppend);
-  }
 }

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; background-color: #f8f9fa; color: #333; }
+      h2 { color: #1a73e8; font-size: 18px; border-bottom: 2px solid #1a73e8; padding-bottom: 5px; margin-top: 0; }
+      .controls { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+      select, button { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+      button { cursor: pointer; border: none; font-weight: bold; transition: 0.2s; }
+      .btn-generate { background-color: #fbbc04; color: #000; }
+      .btn-ai { background-color: #8e24aa; color: #fff; }
+      .btn-send { background-color: #34a853; color: #fff; width: 100%; padding: 12px; font-size: 16px; margin-top: 15px; }
+      button:hover { opacity: 0.8; }
+      button:disabled { background-color: #ccc; cursor: not-allowed; }
+      textarea { width: 100%; height: 500px; padding: 12px; font-family: monospace; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; resize: vertical; line-height: 1.4; }
+      #status { margin-top: 10px; font-weight: bold; color: #d32f2f; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <h2>📝 月次報告・AIレビュージェネレーター</h2>
+    
+    <div class="controls">
+      <select id="areaSelect">
+        <option value="グループ全体">グループ全体</option>
+        <option value="関東">関東</option>
+        <option value="関西">関西</option>
+        <option value="関東第一">関東第一</option>
+        <option value="関東第二">関東第二</option>
+        <option value="埼玉">埼玉</option>
+        <option value="神奈川">神奈川</option>
+        <option value="千葉">千葉</option>
+        <option value="茨城">茨城</option>
+        <option value="大阪">大阪</option>
+      </select>
+      <button class="btn-generate" onclick="loadReport()">1. データ抽出</button>
+      <button class="btn-ai" onclick="addAiReview()" id="btnAi">2. AIレビュー生成</button>
+    </div>
+
+    <textarea id="reportBox" placeholder="ここにレポート原稿が生成されます。自由に手直し可能です。"></textarea>
+    
+    <button class="btn-send" onclick="sendChatwork()" id="btnSend">🚀 Chatworkへ送信</button>
+    <div id="status"></div>
+
+    <script>
+      function showStatus(msg, color="#333") {
+        const el = document.getElementById('status');
+        el.innerText = msg;
+        el.style.color = color;
+      }
+
+      function loadReport() {
+        showStatus("データを抽出中...", "#fbbc04");
+        const area = document.getElementById('areaSelect').value;
+        google.script.run.withSuccessHandler(function(text) {
+          document.getElementById('reportBox').value = text;
+          showStatus("データの抽出が完了しました。", "#34a853");
+        }).withFailureHandler(function(err) {
+          showStatus("エラー: " + err.message, "#d32f2f");
+        }).generateReportText(area);
+      }
+
+      function addAiReview() {
+        const text = document.getElementById('reportBox').value;
+        if (!text) { alert("先に「データ抽出」を行ってください。"); return; }
+        
+        showStatus("Gemini 1.5 Pro が分析中... (数秒かかります)", "#8e24aa");
+        document.getElementById('btnAi').disabled = true;
+
+        google.script.run.withSuccessHandler(function(review) {
+          let currentText = document.getElementById('reportBox').value;
+          currentText = currentText.replace("(ここにAIのレビューが挿入されます)", review.trim());
+          document.getElementById('reportBox').value = currentText;
+          showStatus("AIレビューの生成が完了しました！", "#34a853");
+          document.getElementById('btnAi').disabled = false;
+        }).withFailureHandler(function(err) {
+          showStatus("AIエラー: " + err.message, "#d32f2f");
+          document.getElementById('btnAi').disabled = false;
+        }).fetchAiReview(text);
+      }
+
+      function sendChatwork() {
+        const text = document.getElementById('reportBox').value;
+        if (!text) { alert("送信するテキストがありません。"); return; }
+        if (!confirm("Chatworkに投稿します。よろしいですか？")) return;
+
+        showStatus("Chatworkへ送信中...", "#1a73e8");
+        document.getElementById('btnSend').disabled = true;
+
+        google.script.run.withSuccessHandler(function(res) {
+          showStatus(res, "#34a853");
+          document.getElementById('btnSend').disabled = false;
+        }).withFailureHandler(function(err) {
+          showStatus("送信エラー: " + err.message, "#d32f2f");
+          document.getElementById('btnSend').disabled = false;
+        }).postToChatwork(text);
+      }
+    </script>
+  </body>
+</html>

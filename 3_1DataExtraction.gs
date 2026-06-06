@@ -76,7 +76,6 @@ function buildContext(targetDate) {
 // 3. マスタ・各種辞書の構築処理
 // =========================================================
 function loadMasterData(ctx) {
-  // 正規表現シートの読み込み
   const regInfo = ctx.getDsInfo('正規表現');
   if (regInfo && regInfo.url) {
     try {
@@ -85,12 +84,23 @@ function loadMasterData(ctx) {
       const cOfficial = rHead.findIndex(h => h.includes('正規記載'));
       const cGroup = rHead.findIndex(h => h.includes('グループ'));
       const cArea = rHead.findIndex(h => h === 'エリア' || h === '詳細エリア'); 
-      const cOpen = rHead.findIndex(h => h.includes('開院日'));
+      const cOpen = rHead.findIndex(h => h.includes('開院日') || h.includes('オープン'));
+
+      const excludeList = [
+        '出張インフルエンザワクチン', '【埼玉】ワクチンバックアップシフト',
+        '職域新型コロナワクチン接種', '【千葉】ワクチンバックアップシフト',
+        '【東京】ワクチンバックアップシフト', '院外勤務（内科）',
+        '欠勤', '【関東】バックアップシフト', '院外勤務（小児科）',
+        '有給', '嘱託医業務', '医師会業務'
+      ];
 
       if (cOfficial !== -1) {
         for (let r = 1; r < regData.length; r++) {
           const offName = String(regData[r][cOfficial]).trim();
           if (!offName) continue;
+          
+          if (excludeList.some(exKw => offName.includes(exKw))) continue;
+
           ctx.clinicAttrs[offName] = { group: cGroup !== -1 ? String(regData[r][cGroup]).trim() : '', area: cArea !== -1 ? String(regData[r][cArea]).trim() : '', openDate: ctx.parseDateSafe(regData[r][cOpen]) };
           ctx.clinicDict[offName] = offName;
           rHead.forEach((h, i) => { if (h.includes('表記揺れ')) { const v = String(regData[r][i]).trim(); if (v) ctx.clinicDict[v] = offName; } });
@@ -99,7 +109,6 @@ function loadMasterData(ctx) {
     } catch(e) {}
   }
 
-  // 紹介会社・特別対応の読み込み
   ['紹介会社応募表', '特別対応医師'].forEach(dsName => {
     const info = ctx.getDsInfo(dsName);
     if (info && info.url) {
@@ -119,7 +128,6 @@ function loadMasterData(ctx) {
     }
   });
 
-  // 医師情報（常勤・定期）マスタの読み込み
   [ctx.periods.current.year, ctx.periods.last.year].forEach(year => {
     const mKeys = year === 2026 ? ['医師情報'] : ['2025定期非常勤', '2025常勤', '2025医師情報'];
     mKeys.forEach(mKey => {
@@ -163,7 +171,6 @@ function loadMasterData(ctx) {
     });
   });
 
-  // 採用拠点補完用の「初回勤務マップ」作成
   const shiftUrls = [
     'https://docs.google.com/spreadsheets/d/1JhLJuxkp6T5hEkfultUE57pmRXBI_lkN6ROp2-CuhCc/edit', // 2025確定シフト
     'https://docs.google.com/spreadsheets/d/10Z8jg4o7Ri9Ggf7u_jauyDDZa6bVnc-iuuuqmkNDafw/edit'  // 2026確定シフト
@@ -175,8 +182,8 @@ function loadMasterData(ctx) {
         const sData = s.getDataRange().getValues();
         if (sData.length < 2) continue;
         const headers = sData[0].map(String);
-        const colClinic = headers.findIndex(h => h.includes('クリニック名'));
-        const colDate = headers.findIndex(h => h.includes('勤務日'));
+        const colClinic = headers.findIndex(h => h.includes('クリニック名') || h.includes('拠点'));
+        const colDate = headers.findIndex(h => h.includes('勤務日') || h.includes('日付'));
         const colId = headers.findIndex(h => h.includes('医籍番号'));
         const colName = headers.findIndex(h => h.includes('氏名') || h.includes('名前'));
 
@@ -198,7 +205,6 @@ function loadMasterData(ctx) {
     } catch(e) {}
   });
 
-  // 休館日・未充足の読み込み
   const holInfo = ctx.getDsInfo('未充足報告');
   if (holInfo && holInfo.url) {
     try {
@@ -225,7 +231,6 @@ function loadMasterData(ctx) {
     } catch(e) {}
   }
 
-  // チェックリスト読み込み
   const chkInfo = ctx.getDsInfo('チェックリスト');
   if (chkInfo && chkInfo.url) {
     try {

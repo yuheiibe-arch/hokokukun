@@ -4,6 +4,8 @@ function onOpen() {
     .addItem('⚡ 先月分をワンクリック集計', 'runLastMonthQuick')
     .addSeparator()
     .addItem('📅 期間を指定して集計 (詳細モード)', 'showAggregationDialog')
+    .addSeparator()
+    .addItem('📝 月次報告を作成 (AIレビュー付)', 'showReportDialog') // ★新規追加
     .addToUi();
 }
 
@@ -34,4 +36,15 @@ function processAggregationFromDialog(startStr, endStr) {
   const start = new Date(startStr);
   start.setHours(0,0,0,0);
   processAggregationCore(start);
+}
+
+// ==========================================
+// ★ 月次報告用のUIを立ち上げる関数（新規追加）
+// ==========================================
+function showReportDialog() {
+  const html = HtmlService.createHtmlOutputFromFile('ReportUI')
+      .setTitle('月次報告・AIレビュージェネレーター')
+      .setWidth(750)
+      .setHeight(850);
+  SpreadsheetApp.getUi().showModalDialog(html, ' ');
 }
