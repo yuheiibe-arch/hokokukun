@@ -16,6 +16,10 @@ function generateRequirementsPDF() {
         .col-c { width: 12%; }
         .col-logic { width: 40%; }
         .col-source { width: 30%; }
+        /* ★追加：注釈用のスタイル */
+        .notes-box { border: 1px solid #ccc; padding: 8px 12px; background-color: #fafafa; margin-top: 5px; }
+        .notes-box ul { padding-left: 18px; margin: 0; }
+        .notes-box li { margin-bottom: 6px; }
       </style>
     </head>
     <body>
@@ -69,6 +73,18 @@ function generateRequirementsPDF() {
         <tr><td>在籍医師数（常勤）</td><td>対象月/前月/昨年</td><td>対象月に在籍しており、かつ実際にシフトに入った常勤医師の実人数。</td><td>『確定シフト』<br>＋『常勤マスタ』</td></tr>
         <tr><td>在籍数（定期非常勤）</td><td>対象月/前月/昨年</td><td>対象月に在籍しており、かつ実際にシフトに入った定期非常勤の実人数。</td><td>『確定シフト』<br>＋『定期マスタ』</td></tr>
       </table>
+
+      <h2>■ 7. 【重要】集計に関する特記事項・前提条件</h2>
+      <div class="notes-box">
+        <ul>
+          <li><strong>時給・コスト算出の除外項目:</strong> エリア平均時給などの算出には、「紹介会社への紹介手数料（一律20%）」および「インセンティブ支給額」は含まれていません。</li>
+          <li><strong>常勤医師の時給除外:</strong> エリア平均時給の算出において、常勤医師の給与・労働時間は計算母数から除外しています。</li>
+          <li><strong>内科実績の除外:</strong> 本報告は「小児科単体」の実績となります。内科稼働分（2026年6月現在、常勤2名・定期非常勤27名）はすべての集計から除外しています。</li>
+          <li><strong>依頼手当の増加要因:</strong> 依頼手当が昨年と比較して大きく増額していますが、これは昨年10月より導入された「常勤医師追加勤務手当制度」が大きく寄与しているためです。</li>
+          <li><strong>２診時間の算出定義:</strong> 確定シフトをベースに、各拠点の基本営業時間（09:00〜21:00 ※北葛西のみ20:00）を基準としています。1拠点あたりの総勤務時間から休診時間（2時間）を差し引いた上で、重複する稼働時間を「2診時間」として算出しています。</li>
+          <li><strong>データ抽出のタイミングによる差異:</strong> 各種実績は「確定シフト」の最新データを用いて算出していますが、残業時間などはデータ保存・取得のタイミングにより、最終的な確定給与明細等と微細な差異が生じる場合があります。</li>
+        </ul>
+      </div>
     </body>
     </html>
   `;

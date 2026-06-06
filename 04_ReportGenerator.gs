@@ -1,5 +1,5 @@
 // ==========================================
-// 1. レポートテキストの自動生成
+// 1. レポートテキストの自動生成（タグ構造最適化・関東関西対応版）
 // ==========================================
 function generateReportText(targetArea = 'グループ全体') {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -8,12 +8,17 @@ function generateReportText(targetArea = 'グループ全体') {
 
   const bHeaders = baseSheet.getRange(1, 1, 1, baseSheet.getLastColumn()).getValues()[0];
   let colIdx = -1;
+  let kantoColIdx = -1;
+  let kansaiColIdx = -1;
+
   for (let c = 3; c < bHeaders.length; c++) {
-    if (String(bHeaders[c]).trim() === targetArea) { colIdx = c + 1; break; }
+    const hText = String(bHeaders[c]).trim();
+    if (hText === targetArea) colIdx = c + 1;
+    if (hText === '関東') kantoColIdx = c + 1;
+    if (hText === '関西') kansaiColIdx = c + 1;
   }
   if (colIdx === -1) throw new Error(`${targetArea}の列が見つかりません。`);
 
-  // ★修正：システム日付から「先月」を自動で計算する
   const today = new Date();
   const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const monthDisplay = (lastMonth.getMonth() + 1) + '月';
@@ -26,8 +31,6 @@ function generateReportText(targetArea = 'グループ全体') {
 
   const metricsDef = [
     { key: 'エリア平均時給', displayName: 'エリア平均時給', unit: '¥', type: 'money', cat: '💰 時給・コスト指標', exclude: [] },
-    { key: 'エリア別詳細時給', displayName: 'エリア別詳細時給', unit: '¥', type: 'money', cat: '', exclude: [] },
-    { key: '依頼手当', displayName: '依頼手当総額', unit: '¥', type: 'money', cat: '', exclude: [] },
     
     { key: '稼働人員（全医師', displayName: '稼働人員（全医師）', unit: '人', type: 'people', cat: '👥 稼働・人員状況', exclude: [] },
     { key: '稼働人員（常勤除く', displayName: '稼働人員（常勤除く）', unit: '人', type: 'people', cat: '', exclude: [] },
@@ -36,7 +39,6 @@ function generateReportText(targetArea = 'グループ全体') {
     
     { key: '２診時間', displayName: '２診時間数', unit: 'h', type: 'time', cat: '🏥 シフト・拠点状況', exclude: [] },
     { key: '2診拠点数', displayName: '２診拠点数', unit: '拠点', type: 'num', cat: '', exclude: [] },
-    { key: '２診拠点数', displayName: '２診拠点数', unit: '拠点', type: 'num', cat: '', exclude: [] }, 
     { key: '対象拠点数', displayName: '営業拠点数', unit: '拠点', type: 'num', cat: '', exclude: ['2診', '２診'] }, 
     
     { key: '新規採用', displayName: '新規採用（直接）', unit: '人', type: 'people', cat: '✨ 採用・在籍状況', exclude: ['紹介', 'エージェント'] },
@@ -50,9 +52,7 @@ function generateReportText(targetArea = 'グループ全体') {
     
     { key: '来院数', displayName: '来院数 (目標達成率)', unit: '人', type: 'mix-people', cat: '📈 業績実績', exclude: [] }, 
     { key: '売上（目標達成率', displayName: '売上 (目標達成率)', unit: '¥', type: 'mix-money', cat: '', exclude: [] },
-    { key: '売上(目標達成率', displayName: '売上 (目標達成率)', unit: '¥', type: 'mix-money', cat: '', exclude: [] }, 
-    
-    // ★修正：「小児科」を追記
+   
     { key: '在籍医師数（常勤', displayName: '在籍医師数（小児科・常勤）', unit: '人', type: 'people', cat: '🏢 在籍医師数', exclude: [] },
     { key: '在籍医師数（定期', displayName: '在籍医師数（小児科・定期）', unit: '人', type: 'people', cat: '', exclude: [] }
   ];
@@ -100,8 +100,8 @@ function generateReportText(targetArea = 'グループ全体') {
     return `${sign}${formatNum(Math.abs(diff), type, unit)}`;
   };
 
-  // ★修正：小児科と月の間にスペースを追加
-  let reportText = `[info][title]月次実績報告（${targetArea}）[/title]\nお疲れ様です。小児科 ${monthDisplay}の月次実績をご報告いたします。\n\n`;
+  // 第1ブロック（実績データ）の開始
+  let reportText = `[info]\n[title]月次実績報告（${targetArea}）[/title]\nお疲れ様です。小児科 ${monthDisplay}の月次実績をご報告いたします。\n\n`;
   let currentCategory = '';
 
   metrics.forEach(m => {
@@ -150,14 +150,43 @@ function generateReportText(targetArea = 'グループ全体') {
       }
 
       reportText += `・${name}: ${displayCurr} (前月: ${diffP} / 昨年: ${diffL})\n`;
+
+      // 関東・関西エリアの時給追加処理
+      if (name === 'エリア平均時給') {
+        if (kantoColIdx !== -1) {
+          const kCurr = baseSheet.getRange(bRow, kantoColIdx).getDisplayValue();
+          const kPrev = baseSheet.getRange(bRow + 1, kantoColIdx).getDisplayValue();
+          const kLast = baseSheet.getRange(bRow + 2, kantoColIdx).getDisplayValue();
+          const ck = parseVal(kCurr, type);
+          const pk = parseVal(kPrev, type);
+          const lk = parseVal(kLast, type);
+          const kDiffP = formatDiff(ck.val, pk.val, type, unit);
+          const kDiffL = formatDiff(ck.val, lk.val, type, unit);
+          const kDisp = formatNum(ck.val, type, unit);
+          reportText += `  ・関東\n    └ ${kDisp} (前月: ${kDiffP} / 昨年: ${kDiffL})\n`;
+        }
+        if (kansaiColIdx !== -1) {
+          const sCurr = baseSheet.getRange(bRow, kansaiColIdx).getDisplayValue();
+          const sPrev = baseSheet.getRange(bRow + 1, kansaiColIdx).getDisplayValue();
+          const sLast = baseSheet.getRange(bRow + 2, kansaiColIdx).getDisplayValue();
+          const cs = parseVal(sCurr, type);
+          const ps = parseVal(sPrev, type);
+          const ls = parseVal(sLast, type);
+          const sDiffP = formatDiff(cs.val, ps.val, type, unit);
+          const sDiffL = formatDiff(cs.val, ls.val, type, unit);
+          const sDisp = formatNum(cs.val, type, unit);
+          reportText += `  ・関西\n    └ ${sDisp} (前月: ${sDiffP} / 昨年: ${sDiffL})\n`;
+        }
+      }
     }
   });
 
-  reportText += `\n[hr]\n[title]🤖 AI分析レビュー[/title]\n(ここにAIのレビューが挿入されます)[/info]`;
+  // ★修正：第1ブロックを閉じ、第2ブロック（レビュー）を新設
+  reportText += `[/info]\n\n[info]\n[title]🤖 レビュー[/title]\n(ここにAIのレビューが挿入されます)\n[/info]`;
   return reportText;
 }
 // ==========================================
-// 2. Gemini API 呼び出し処理（秀逸なアナリスト版に改修）
+// 2. Gemini API 呼び出し処理（構造化・トレンド分析・ドライなプロ目線版）
 // ==========================================
 function fetchAiReview(reportData) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
@@ -165,20 +194,32 @@ function fetchAiReview(reportData) {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
   
-  const prompt = `あなたは優秀な医療法人のデータアナリストです。以下の月次実績データを分析し、現場のモチベーションを高めつつ、経営陣にも刺さる秀逸なAIレビューを生成してください。
+  const prompt = `あなたは優秀な医療法人のデータアナリストです。以下の小児科の月次実績データを分析し、現場や経営陣に提出するAIレビューを生成してください。
 
-【出力条件】
-・見出しは使用せず、箇条書き（・）で3点にまとめること。
+【小児科の季節性・前提知識（分析の前提として使用すること）】
+・当法人は毎年拠点が拡大しているため、「稼働人員（医師数）」の総数が増加するのは当然の前提である。そのため、単なる人数の増加を成果としてもてはやすのではなく、構成比（直応募や紹介の割合）や効率性などの中身の変化を評価すること。
+・当法人の繁忙期は「10月～1月」である。
+・大型連休（GW、お盆、年末年始など）がある月は、常勤医師の稼働比率が低下し、スポット医師（募集枠）が増加する傾向がある。
+・祝日がない（または少ない）月は、常勤医師の稼働比率が上がり、募集枠が減少する傾向がある。
+
+【出力条件・トーン＆マナー】
 ・「依頼手当総額」に関する言及は絶対に行わないこと。
-・単なる数字の羅列を避け、その数値が意味する「背景」や「トレンドの変化」を言語化して、読みやすく洗練された文章にすること。
-・以下の構成で必ず3点を記述すること：
- 1点目：必ず「エリア平均時給」の変化にフォーカスした実績の振り返り。
- 2点目：「稼働人員（全医師）」「構成比（特に紹介会社や直応募）」の実績にフォーカスした振り返り。
- 3点目：「２診時間数」「医師不在時間」「医師残業時間」などのシフト調整・拠点状況に関する指標に着目し、急激な増加や特筆すべきトレンド（波及効果など）があれば必ず指摘すること。また、それを踏まえた「次月の注目項目」を述べること（※提言や解決策は不要）。
-・数値を引用する際は、「前月比」と「昨年比」を比較し、変化幅（インパクト）がより大きい方を積極的に採用して言及すること。
-・ネガティブな表現（例：「圧迫している」「悪化した」等）は避け、事実を客観的かつ前向きなトーンで記述すること。
-・全体の文字数は300〜400文字程度で、インサイト（洞察）のある内容にすること。
-・[title]などの装飾タグは自分で絶対に出力しないこと。
+・「市場競争力を維持しつつ」「適正なコスト管理が〜」「最適化が功を奏し〜」「非常に安定した運営が〜」といった、定型的で無駄な装飾言葉（企業構文・過剰な称賛）は一切使用しないこと。
+・感情や美辞麗句を排除し、事実に即してドライかつ鋭く分析し、データから読み取れる具体的なインサイトのみを端的に記述すること。
+・箇条書きの「・」や、[title]などの装飾タグは自分で出力しないこと。
+・以下の4つの見出し（【】を使用）を必ずそのまま用いて、各項目を2〜3文程度で記述すること。
+
+【平均時給推移】
+「エリア平均時給」の変化（前月比・昨年比）を事実ベースで記載し、その数値の変動要因（常勤・スポットの比率変化など）を端的に分析すること。無駄な称賛は不要。
+
+【稼働人員】
+拠点拡大に伴う単純な人数増ではなく、「構成比（直応募や紹介）」の推移にフォーカスし、採用チャネルの依存度や人員構成の変化を事実ベースで記述すること。
+
+【２診時間】
+「２診時間数」「医師不在時間」「医師残業時間」に着目し、シフトの充足状況や稼働効率の変化を客観的に指摘すること。
+
+【トレンド】
+データ内に記載されている「報告対象月」と、上記の「季節性・前提知識」を掛け合わせること。対象月の実績に対する要因分析（連休の影響など）と、次月に向けた予測（祝日の有無による常勤比率・募集枠の増減、繁忙期への備えなど）を具体的に記述すること。
 
 【月次データ】
 ${reportData}
