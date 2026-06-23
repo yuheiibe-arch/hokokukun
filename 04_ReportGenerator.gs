@@ -1,5 +1,5 @@
 // ==========================================
-// 1. レポートテキストの自動生成（タグ構造最適化・関東関西対応版）
+// 1. レポートテキストの自動生成（タグ構造最適化・関東関西対応・末尾修正版）
 // ==========================================
 function generateReportText(targetArea = 'グループ全体') {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -100,7 +100,6 @@ function generateReportText(targetArea = 'グループ全体') {
     return `${sign}${formatNum(Math.abs(diff), type, unit)}`;
   };
 
-  // 第1ブロック（実績データ）の開始
   let reportText = `[info]\n[title]月次実績報告（${targetArea}）[/title]\nお疲れ様です。小児科 ${monthDisplay}の月次実績をご報告いたします。\n\n`;
   let currentCategory = '';
 
@@ -151,7 +150,6 @@ function generateReportText(targetArea = 'グループ全体') {
 
       reportText += `・${name}: ${displayCurr} (前月: ${diffP} / 昨年: ${diffL})\n`;
 
-      // 関東・関西エリアの時給追加処理
       if (name === 'エリア平均時給') {
         if (kantoColIdx !== -1) {
           const kCurr = baseSheet.getRange(bRow, kantoColIdx).getDisplayValue();
@@ -181,8 +179,8 @@ function generateReportText(targetArea = 'グループ全体') {
     }
   });
 
-  // ★修正：第1ブロックを閉じ、第2ブロック（レビュー）を新設
-  reportText += `[/info]\n\n[info]\n[title]🤖 レビュー[/title]\n(ここにAIのレビューが挿入されます)\n[/info]`;
+  // ★修正：実績データの[info]を閉じ、レビュー用の[info]を作成。確実に末尾を[/info]で終わらせる。
+  reportText += `\n[/info]\n\n[info]\n[title]🤖 レビュー[/title]\n(ここにAIのレビューが挿入されます)\n[/info]`;
   return reportText;
 }
 // ==========================================
