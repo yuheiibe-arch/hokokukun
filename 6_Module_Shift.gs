@@ -9,7 +9,7 @@ function calcShiftData(targetDate, urls) {
   const targetYear = targetDate.getFullYear();
   const targetMonthNum = targetDate.getMonth() + 1; // 1〜12
   
-  const targetAreas = ['関東', '関西', '東京第一', '東京第二', '埼玉', '神奈川', '千葉', '茨城', '大阪', 'グループ全体'];
+  const targetAreas = ['関東', '関西', '関東第一', '関東第二', '埼玉', '神奈川', '千葉', '茨城', '大阪', 'グループ全体'];
   const res = {};
   
   // 1. エリアごとのデータ構造と、UU計算用のSet（重複排除用）を初期化
@@ -40,8 +40,8 @@ function calcShiftData(targetDate, urls) {
       else if (clinicStr.match(/神奈川|茅ヶ崎|天王町|横浜|川崎|武蔵小杉|藤沢|戸塚/)) { areas.push('関東', '神奈川'); }
       else if (clinicStr.match(/千葉|村上|船橋|柏|松戸|市川/)) { areas.push('関東', '千葉'); }
       else if (clinicStr.match(/茨城|水戸|つくば|守谷/)) { areas.push('関東', '茨城'); }
-      else if (clinicStr.match(/第一/)) { areas.push('関東', '東京第一'); }
-      else if (clinicStr.match(/第二/)) { areas.push('関東', '東京第二'); }
+      else if (clinicStr.match(/第一/)) { areas.push('関東', '関東第一'); }
+      else if (clinicStr.match(/第二/)) { areas.push('関東', '関東第二'); }
       else { areas.push('関東'); } 
     } else {
       areas.push('関東');
