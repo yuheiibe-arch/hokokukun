@@ -28,7 +28,7 @@ function processAggregationCore(targetDate) {
 }
 
 // ==========================================
-// ▼上記の下に、そのまま新規追加してください
+// ★ 修正版：年度平均時給シートへの書き込み（A列ヘッダーのみで動的検索）
 // ==========================================
 function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
   const targetSheet = ss.getSheetByName('年度平均時給');
@@ -52,53 +52,79 @@ function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
     }
   }
 
+  const lastRow = targetSheet.getLastRow();
+
   // ★自己拡張：該当月の列がなければ右端に自動で列を追加する
   if (colIdx === -1) {
     targetSheet.insertColumnAfter(lastCol);
     lastCol++;
     colIdx = lastCol;
     targetSheet.getRange(1, colIdx).setValue(targetDate).setNumberFormat('yyyy/MM');
-    // 左隣から背景色や罫線の書式のみをコピー
-    targetSheet.getRange(1, colIdx - 1, 46, 1).copyTo(targetSheet.getRange(1, colIdx, 46, 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    // 左隣から背景色や罫線の書式のみをコピー（固定行数ではなく動的に最終行まで）
+    if (lastRow > 1) {
+      targetSheet.getRange(1, colIdx - 1, lastRow, 1).copyTo(targetSheet.getRange(1, colIdx, lastRow, 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    }
   }
 
-  const baseRowMap = { '平均時給': 0, '稼働人員': 12, '対象拠点数': 24, '医師勤務時間': 36 };
-  const areaOffsetMap = { '関東': 0, '関西': 1, '関東第一': 2, '関東第二': 3, '埼玉': 4, '神奈川': 5, '千葉': 6, '大阪': 7, '茨城': 8, 'グループ全体': 9 };
+  if (lastRow < 2) return;
 
-  const outputValues = targetSheet.getRange(2, colIdx, 46, 1).getValues();
-  const outputColors = targetSheet.getRange(2, colIdx, 46, 1).getBackgrounds();
+  // ★ 修正ポイント：B列は完全無視。A列のみを取得してパース
+  const aValues = targetSheet.getRange(1, 1, lastRow, 1).getDisplayValues();
+  const metrics = ['平均時給', '稼働人員', '対象拠点数', '医師勤務時間'];
+  const targetAreas = ['関東', '関西', '関東第一', '関東第二', '埼玉', '神奈川', '千葉', '大阪', '茨城', 'グループ全体'];
 
-  Object.keys(areaOffsetMap).forEach(area => {
+  const rowMap = {};
+  let currentMetric = '';
+
+  // A列を上からスキャンして、「指標_エリア」に対応する正確な行番号をマッピング
+  for (let i = 0; i < aValues.length; i++) {
+    const cellText = String(aValues[i][0]).replace(/\s+/g, '');
+    if (!cellText) continue;
+
+    // A列のセルに指標名（例:「平均時給」など）が含まれていたら、現在のブロックを切り替え
+    const foundMetric = metrics.find(m => cellText.includes(m));
+    if (foundMetric) {
+      currentMetric = foundMetric;
+      continue; // 指標名自体の行はデータ書き込み対象外なので次へ
+    }
+
+    // ブロックが特定されている状態で、エリア名が完全一致したら行番号を記録
+    if (currentMetric) {
+      const foundArea = targetAreas.find(a => cellText === a);
+      if (foundArea) {
+        rowMap[`${currentMetric}_${foundArea}`] = i + 1; // getRange用の1始まりインデックス
+      }
+    }
+  }
+
+  // 特定した行に対してデータを安全に書き込み
+  targetAreas.forEach(area => {
     const d = monthData[area];
     if (!d) return;
 
-    const rWage = baseRowMap['平均時給'] + areaOffsetMap[area];
-    const rUU   = baseRowMap['稼働人員'] + areaOffsetMap[area];
-    const rBase = baseRowMap['対象拠点数'] + areaOffsetMap[area];
-    const rTime = baseRowMap['医師勤務時間'] + areaOffsetMap[area];
+    // 拠点稼働があるかチェック
+    const isWorking = (d.baseCount.total > 0 || d.uu.total > 0);
 
-    // 拠点稼働があれば白背景で書き込み
-    if (d.baseCount.total > 0 || d.uu.total > 0) {
-      outputValues[rWage][0] = d.wage.areaAvg > 0 ? d.wage.areaAvg : '';
-      outputColors[rWage][0] = '#ffffff';
-
-      outputValues[rUU][0] = d.uu.total > 0 ? d.uu.total : '';
-      outputColors[rUU][0] = '#ffffff';
-
-      outputValues[rBase][0] = d.baseCount.total > 0 ? d.baseCount.total : '';
-      outputColors[rBase][0] = '#ffffff';
-
-      outputValues[rTime][0] = d.ratioTime.total > 0 ? (d.ratioTime.total / 60).toFixed(1) : '';
-      outputColors[rTime][0] = '#ffffff';
-    } else {
-      // グレーアウト処理
-      const gray = '#f0f0f0';
-      outputValues[rWage][0] = ''; outputColors[rWage][0] = gray;
-      outputValues[rUU][0] = '';   outputColors[rUU][0] = gray;
-      outputValues[rBase][0] = ''; outputColors[rBase][0] = gray;
-      outputValues[rTime][0] = ''; outputColors[rTime][0] = gray;
-    }
+    metrics.forEach(metric => {
+      // マッピングした辞書から正確な行番号を取り出す
+      const targetRowNum = rowMap[`${metric}_${area}`];
+      
+      if (targetRowNum) {
+        const range = targetSheet.getRange(targetRowNum, colIdx);
+        if (isWorking) {
+          range.setBackground('#ffffff');
+          let val = '';
+          if (metric === '平均時給' && d.wage.areaAvg > 0) val = d.wage.areaAvg;
+          if (metric === '稼働人員' && d.uu.total > 0) val = d.uu.total;
+          if (metric === '対象拠点数' && d.baseCount.total > 0) val = d.baseCount.total;
+          if (metric === '医師勤務時間' && d.ratioTime.total > 0) val = (d.ratioTime.total / 60).toFixed(1);
+          range.setValue(val);
+        } else {
+          // 稼働がない場合はグレーアウト処理
+          range.setBackground('#f0f0f0');
+          range.setValue('');
+        }
+      }
+    });
   });
-
-  targetSheet.getRange(2, colIdx, 46, 1).setValues(outputValues).setBackgrounds(outputColors);
 }
