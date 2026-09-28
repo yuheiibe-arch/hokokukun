@@ -8,6 +8,17 @@ function onOpen() {
     .addItem('📝 月次報告を作成 (AIレビュー付)', 'showReportDialog') // ★新規追加
     .addToUi();
 }
+// ==========================================
+// ★ 詳細モード用のUIを立ち上げる関数（追加）
+// ==========================================
+function showAggregationDialog() {
+  // ※ 'AggregationUI' の部分は、実際の詳細モード用HTMLファイル名に合わせて変更してください
+  const html = HtmlService.createHtmlOutputFromFile('AggregationUI')
+      .setTitle('期間を指定して集計（詳細モード）')
+      .setWidth(400)
+      .setHeight(300);
+  SpreadsheetApp.getUi().showModalDialog(html, ' ');
+}
 
 // ==========================================
 // ★ 月次報告用のUIを立ち上げる関数（新規追加）

@@ -1,5 +1,5 @@
 // ==========================================
-// ▼既存の processAggregationCore と差し替えてください
+// ▼ メイン処理（既存の processAggregationCore と差し替えてください）
 // ==========================================
 function processAggregationCore(targetDate) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -17,8 +17,11 @@ function processAggregationCore(targetDate) {
     ss.toast('【3/3】ベースシートへ書き込んでいます...', '進行状況', 5);
     writeToBaseSheet(ss, allData);
     
-    // ★★★ 新規追加：「年度平均時給」シートへ当月分を自動追記 ★★★
+    // ★★★ 既存機能：「年度平均時給」シートへ当月分を自動追記 ★★★
     updateAnnualSheetSingleMonth(ss, targetDate, allData.current);
+
+    // ★★★ 新規追加：「平均時給推移グラフ」シートへ直接書き込み ★★★
+    updateGraphSheetVertical(ss, targetDate, allData.current);
     
     ss.toast('すべての集計と書き込みが完了しました！', '完了', 5);
     
@@ -28,7 +31,7 @@ function processAggregationCore(targetDate) {
 }
 
 // ==========================================
-// ★ 修正版：年度平均時給シートへの書き込み（A列ヘッダーのみで動的検索）
+// ★ 修正強化版：年度平均時給シートへの書き込み（日付型/文字列型の両方に対応）
 // ==========================================
 function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
   const targetSheet = ss.getSheetByName('年度平均時給');
@@ -42,13 +45,22 @@ function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
   const tYear = targetDate.getFullYear();
   const tMonth = targetDate.getMonth(); // 0始まり
 
+  // 横方向（1行目の列ヘッダー）のスキャン (文字列とDate型の両方に対応)
   for (let c = 1; c < lastCol; c++) {
     const d = topHeaders[c];
+    let dObj = null;
+
     if (d instanceof Date) {
-      if (d.getFullYear() === tYear && d.getMonth() === tMonth) {
-        colIdx = c + 1; // getRange用の1始まりインデックス
-        break;
-      }
+      dObj = d;
+    } else if (d && (typeof d === 'string' || d instanceof String)) {
+      const cleanStr = String(d).trim().replace(/-/g, '/');
+      const parsed = new Date(cleanStr.includes('/') ? cleanStr + '/01' : cleanStr);
+      if (!isNaN(parsed.getTime())) dObj = parsed;
+    }
+
+    if (dObj && dObj.getFullYear() === tYear && dObj.getMonth() === tMonth) {
+      colIdx = c + 1; // getRange用の1始まりインデックス
+      break;
     }
   }
 
@@ -56,10 +68,18 @@ function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
 
   // ★自己拡張：該当月の列がなければ右端に自動で列を追加する
   if (colIdx === -1) {
-    targetSheet.insertColumnAfter(lastCol);
-    lastCol++;
-    colIdx = lastCol;
+    // 完全に空っぽではない実際の最終列を再計算して、その右に追加
+    let realLastCol = 1;
+    for (let c = topHeaders.length - 1; c >= 0; c--) {
+      if (topHeaders[c] !== "" && topHeaders[c] !== null && topHeaders[c] !== undefined) {
+        realLastCol = c + 1;
+        break;
+      }
+    }
+    targetSheet.insertColumnAfter(realLastCol);
+    colIdx = realLastCol + 1;
     targetSheet.getRange(1, colIdx).setValue(targetDate).setNumberFormat('yyyy/MM');
+    
     // 左隣から背景色や罫線の書式のみをコピー（固定行数ではなく動的に最終行まで）
     if (lastRow > 1) {
       targetSheet.getRange(1, colIdx - 1, lastRow, 1).copyTo(targetSheet.getRange(1, colIdx, lastRow, 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
@@ -68,10 +88,11 @@ function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
 
   if (lastRow < 2) return;
 
-  // ★ 修正ポイント：B列は完全無視。A列のみを取得してパース
+  // A列のみを取得してパース
   const aValues = targetSheet.getRange(1, 1, lastRow, 1).getDisplayValues();
   const metrics = ['平均時給', '稼働人員', '対象拠点数', '医師勤務時間'];
-  const targetAreas = ['関東', '関西', '関東第一', '関東第二', '埼玉', '神奈川', '千葉', '大阪', '茨城', 'グループ全体'];
+  // ★ ここを「東京第一」「東京第二」に修正
+  const targetAreas = ['関東', '関西', '東京第一', '東京第二', '埼玉', '神奈川', '千葉', '大阪', '茨城', 'グループ全体'];
 
   const rowMap = {};
   let currentMetric = '';
@@ -81,18 +102,18 @@ function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
     const cellText = String(aValues[i][0]).replace(/\s+/g, '');
     if (!cellText) continue;
 
-    // A列のセルに指標名（例:「平均時給」など）が含まれていたら、現在のブロックを切り替え
+    // A列のセルに指標名が含まれていたら、現在のブロックを切り替え
     const foundMetric = metrics.find(m => cellText.includes(m));
     if (foundMetric) {
       currentMetric = foundMetric;
-      continue; // 指標名自体の行はデータ書き込み対象外なので次へ
+      continue;
     }
 
     // ブロックが特定されている状態で、エリア名が完全一致したら行番号を記録
     if (currentMetric) {
       const foundArea = targetAreas.find(a => cellText === a);
       if (foundArea) {
-        rowMap[`${currentMetric}_${foundArea}`] = i + 1; // getRange用の1始まりインデックス
+        rowMap[`${currentMetric}_${foundArea}`] = i + 1;
       }
     }
   }
@@ -106,7 +127,6 @@ function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
     const isWorking = (d.baseCount.total > 0 || d.uu.total > 0);
 
     metrics.forEach(metric => {
-      // マッピングした辞書から正確な行番号を取り出す
       const targetRowNum = rowMap[`${metric}_${area}`];
       
       if (targetRowNum) {
@@ -126,5 +146,56 @@ function updateAnnualSheetSingleMonth(ss, targetDate, monthData) {
         }
       }
     });
+  });
+}
+
+// ==========================================
+// ★ 【新規追加】平均時給推移グラフシート（縦方向）への直接書き込み処理
+// ==========================================
+function updateGraphSheetVertical(ss, targetDate, monthData) {
+  const sheet = ss.getSheetByName('平均時給推移グラフ');
+  if (!sheet) {
+    console.error('「平均時給推移グラフ」シートが見つかりません。');
+    return;
+  }
+
+  // 探したい年月（例: "2026/06"）
+  const targetMonthStr = Utilities.formatDate(targetDate, "GMT+9", "yyyy/MM");
+  const lastRow = sheet.getLastRow();
+  
+  // 画像から推測し、A列とB列の値を一気に取得して日付を探す
+  const dateValues = sheet.getRange(1, 1, lastRow, 2).getDisplayValues(); 
+  let targetRow = -1;
+  let dateCol = 2; // 日付がある列（デフォルトはB列と想定）
+
+  for (let i = 0; i < dateValues.length; i++) {
+    if (String(dateValues[i][0]).includes(targetMonthStr)) { targetRow = i + 1; dateCol = 1; break; }
+    if (String(dateValues[i][1]).includes(targetMonthStr)) { targetRow = i + 1; dateCol = 2; break; }
+  }
+
+  if (targetRow === -1) {
+    SpreadsheetApp.getActiveSpreadsheet().toast(`「平均時給推移グラフ」に ${targetMonthStr} の行がありません。手動で日付を追加してください。`, '警告');
+    return;
+  }
+
+  // ★ ここを「東京第一」「東京第二」に修正（画像の列順に合わせる）
+  const areaCols = {
+    '関東': dateCol + 1,
+    '関西': dateCol + 2,
+    '東京第一': dateCol + 3,
+    '東京第二': dateCol + 4,
+    '埼玉': dateCol + 5,
+    '神奈川': dateCol + 6,
+    '千葉': dateCol + 7,
+    '大阪': dateCol + 8,
+    '茨城': dateCol + 9,
+    'グループ全体': dateCol + 10
+  };
+
+  // 各エリアの平均時給を該当セルに書き込む
+  Object.keys(areaCols).forEach(area => {
+    if (monthData[area] && monthData[area].wage && monthData[area].wage.areaAvg > 0) {
+      sheet.getRange(targetRow, areaCols[area]).setValue(monthData[area].wage.areaAvg);
+    }
   });
 }

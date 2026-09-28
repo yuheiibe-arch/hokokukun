@@ -26,7 +26,8 @@ function buildContext(targetDate) {
 
   const ctx = {
     ss: ss,
-    targetAreas: ['関東', '関西', '関東第一', '関東第二', '埼玉', '神奈川', '千葉', '茨城', '大阪', 'グループ全体'],
+    // ★ '関東第一', '関東第二' を '東京第一', '東京第二' に変更
+    targetAreas: ['関東', '関西', '東京第一', '東京第二', '埼玉', '神奈川', '千葉', '茨城', '大阪', 'グループ全体'],
     periods: {
       current: { str: Utilities.formatDate(dCurr, "GMT+9", "yyyy/MM"), dot: `${dCurr.getFullYear()}.${dCurr.getMonth() + 1}`, year: dCurr.getFullYear(), monthNum: dCurr.getMonth() + 1, dateObj: dCurr },
       prev:    { str: Utilities.formatDate(dPrev, "GMT+9", "yyyy/MM"), dot: `${dPrev.getFullYear()}.${dPrev.getMonth() + 1}`, year: dPrev.getFullYear(), monthNum: dPrev.getMonth() + 1, dateObj: dPrev },
@@ -49,18 +50,28 @@ function buildContext(targetDate) {
     getTargetAreasForClinic: function(rawClinic) {
       const areas = new Set(['グループ全体']);
       const cStr = String(rawClinic || '').trim();
+      
+      // ★ 翻訳ヘルパー：「関東第一/第二」を強制的に「東京第一/第二」に変換する
+      const formatArea = (name) => String(name).replace(/関東第一/g, '東京第一').replace(/関東第二/g, '東京第二');
+
       if (!cStr) return Array.from(areas).filter(a => this.targetAreas.includes(a));
 
       const offClinic = this.clinicDict[cStr] || cStr;
       const attrs = this.clinicAttrs[offClinic];
+      
+      // ★ マスタの文字を翻訳してから追加する
       if (attrs) {
-        if (attrs.group) areas.add(attrs.group);
-        if (attrs.area) areas.add(attrs.area);
+        if (attrs.group) areas.add(formatArea(attrs.group));
+        if (attrs.area) areas.add(formatArea(attrs.area));
       }
+      
       const currentAreas = Array.from(areas).join(',');
-      if (currentAreas.match(/東京|埼玉|神奈川|千葉|茨城|関東第一|関東第二/) || cStr.match(/東京|埼玉|神奈川|千葉|茨城/)) areas.add('関東');
+      // ★ 正規表現内の '関東第一|関東第二' を '東京第一|東京第二' に修正
+      if (currentAreas.match(/東京|埼玉|神奈川|千葉|茨城|東京第一|東京第二/) || cStr.match(/東京|埼玉|神奈川|千葉|茨城/)) areas.add('関東');
       if (currentAreas.match(/大阪|兵庫|関西/) || cStr.match(/大阪|兵庫/)) areas.add('関西');
-      return Array.from(areas).filter(a => this.targetAreas.includes(a));
+      
+      // ★ 最終出力前にもう一度翻訳をかけてフィルタリング
+      return Array.from(areas).map(formatArea).filter(a => this.targetAreas.includes(a));
     }
   };
 
