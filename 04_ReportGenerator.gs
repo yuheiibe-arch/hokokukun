@@ -1,7 +1,7 @@
 // ==========================================
 // 1. レポートテキストの自動生成（タグ構造最適化・関東関西対応・末尾修正版）
 // ==========================================
-function generateReportText(targetArea = 'グループ全体') {
+function generateReportText(targetArea = 'グループ全体', targetMonthStr) { // ★修正: targetMonthStr を追加
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const baseSheet = ss.getSheetByName('ベースシート');
   if (!baseSheet) throw new Error('ベースシートが見つかりません。');
@@ -19,9 +19,16 @@ function generateReportText(targetArea = 'グループ全体') {
   }
   if (colIdx === -1) throw new Error(`${targetArea}の列が見つかりません。`);
 
-  const today = new Date();
-  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const monthDisplay = (lastMonth.getMonth() + 1) + '月';
+  // ★修正：UIから指定された月があればそれを使い、無ければ先月とする
+  let monthDisplay;
+  if (targetMonthStr) {
+    const [year, month] = targetMonthStr.split('-');
+    monthDisplay = Number(month) + '月';
+  } else {
+    const today = new Date();
+    const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    monthDisplay = (lastMonth.getMonth() + 1) + '月';
+  }
 
   const abColValues = baseSheet.getRange(1, 1, baseSheet.getLastRow(), 2).getValues();
   const searchTexts = abColValues.map((row, index) => ({
@@ -179,10 +186,10 @@ function generateReportText(targetArea = 'グループ全体') {
     }
   });
 
-  // ★修正：実績データの[info]を閉じ、レビュー用の[info]を作成。確実に末尾を[/info]で終わらせる。
   reportText += `\n[/info]\n\n[info]\n[title]🤖 レビュー[/title]\n(ここにAIのレビューが挿入されます)\n[/info]`;
   return reportText;
 }
+
 // ==========================================
 // 2. Gemini API 呼び出し処理（構造化・トレンド分析・ドライなプロ目線版）
 // ==========================================

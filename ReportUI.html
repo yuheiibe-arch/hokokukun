@@ -8,7 +8,7 @@
       body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; background-color: #f8f9fa; color: #333; display: flex; flex-direction: column; }
       h2 { color: #1a73e8; font-size: 18px; border-bottom: 2px solid #1a73e8; padding-bottom: 5px; margin-top: 0; flex-shrink: 0; }
       .controls { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-      select, button { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+      input[type="month"], select, button { padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
       button { cursor: pointer; border: none; font-weight: bold; transition: 0.2s; }
       .btn-generate { background-color: #fbbc04; color: #000; }
       .btn-ai { background-color: #8e24aa; color: #fff; }
@@ -37,6 +37,9 @@
     <h2>📝 月次報告・AIレビュージェネレーター</h2>
     
     <div class="controls">
+      <!-- ★追加: 対象月の選択枠 -->
+      <input type="month" id="targetMonth">
+      
       <select id="areaSelect">
         <option value="グループ全体">グループ全体</option>
         <option value="関東">関東</option>
@@ -68,12 +71,14 @@
       function loadReport() {
         showStatus("データを抽出中...", "#fbbc04");
         const area = document.getElementById('areaSelect').value;
+        const targetMonth = document.getElementById('targetMonth').value; // ★追加: 月の値を取得
+        
         google.script.run.withSuccessHandler(function(text) {
           document.getElementById('reportBox').value = text;
           showStatus("データの抽出が完了しました。", "#34a853");
         }).withFailureHandler(function(err) {
           showStatus("エラー: " + err.message, "#d32f2f");
-        }).generateReportText(area);
+        }).generateReportText(area, targetMonth); // ★追加: 引数に月を渡す
       }
 
       function addAiReview() {
@@ -113,6 +118,13 @@
       }
 
       document.addEventListener('DOMContentLoaded', function() {
+        // ★追加: 初期起動時に「先月」をデフォルト値としてセットする
+        const today = new Date();
+        const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const y = lastMonth.getFullYear();
+        const m = String(lastMonth.getMonth() + 1).padStart(2, '0');
+        document.getElementById('targetMonth').value = `${y}-${m}`;
+        
         loadReport();
       });
     </script>
